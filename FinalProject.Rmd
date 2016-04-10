@@ -17,7 +17,7 @@ setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalPr
 
 #Chathura
 #test
-#setwd()
+setwd("./")
 ```
 
 
@@ -25,7 +25,7 @@ Load data (assumes file is in working directory)
 ```{r}
 #load the data
 beerData<-read.csv("monthly-beer-production-in-austr.csv")
-
+# 
 #turn into time series (cuts off last entry which is NA)
 beerTS<-ts(beerData[1:(nrow(beerData)-1),2], frequency=12, start=c(1956,1))
 ```
@@ -45,8 +45,16 @@ plot(beerTS, main="Beer Production in Australia by Month")
 plot(beerTS, main="Beer Production in Australia by Month (seasons marked)", type="l")
 points(y=beerTS, x=time(beerTS), pch=as.vector(season(beerTS)))
 ```
+#another plot to show seasonality
+```{r}
+require(fpp)
+seasonplot(beerTS,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarterly beer production", col=rainbow(20), pch=19)
+```
 
 In the plot we see obvious seasonality with higher production in November and December and lower production in June and July. There is a trend which may be difficult to fit as it doesn't appear to be a "well known" function like a linear or quadratic function, so we'll have to experiment. It also looks like the variance of the data is larger in the middle, so we will probably want to take the log of our data to correct that varaince issue. 
+
+
+
 
 #Try to figure out deterministic trend
 ```{r}
