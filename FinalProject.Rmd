@@ -1,0 +1,178 @@
+---
+title: "Final Project"
+author: "Hannah Wilder and Chathura Gunasekara"
+date: "April 9, 2016"
+output: pdf_document
+---
+
+Notes:
+Possible source of population data: http://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/3105.0.65.0012014?OpenDocument
+
+Change working directory here
+```{r setup, include=FALSE}
+library(TSA)
+
+#Hannah
+setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalProject")
+
+#Chathura
+#setwd()
+```
+
+
+Load data (assumes file is in working directory)
+```{r}
+#load the data
+beerData<-read.csv("monthly-beer-production-in-austr.csv")
+
+#turn into time series (cuts off last entry which is NA)
+beerTS<-ts(beerData[1:(nrow(beerData)-1),2], frequency=12, start=c(1956,1))
+```
+
+
+```{r}
+#load population data
+pop_totalData<-read.csv("Pop_total.csv", row.names=1)
+pop_total<-t(pop_totalData["Total",])
+pop_totalTS<-ts(pop_total[,1], frequency=1, start=c(1921))
+```
+
+#Plot data
+```{r}
+plot(beerTS, main="Beer Production in Australia by Month")
+
+plot(beerTS, main="Beer Production in Australia by Month (seasons marked)", type="l")
+points(y=beerTS, x=time(beerTS), pch=as.vector(season(beerTS)))
+```
+
+In the plot we see obvious seasonality with higher production in November and December and lower production in June and July. There is a trend which may be difficult to fit as it doesn't appear to be a "well known" function like a linear or quadratic function, so we'll have to experiment. It also looks like the variance of the data is larger in the middle, so we will probably want to take the log of our data to correct that varaince issue. 
+
+#Try to figure out deterministic trend
+```{r}
+t<-1:length(beerTS)
+t2<-t^2
+t3<-t^3
+t4<-t^4
+t5<-t^5
+
+quadFit<-lm(beerTS~t+t2)
+summary(quadFit)
+
+#### plot the data and the fitted quadratic trend function
+plot(x=1:length(beerTS),y=beerTS,type='o',ylab="",xlab="Time - Number of Months Since Jan 1956",main="Quadratic Fit on Beer Production Data")
+curve(expr = coef(quadFit)[1]+coef(quadFit)[2]*x+coef(quadFit)[3]*x^2+coef(quadFit)[4]*x^3,lty=1,add = TRUE, col="red")
+
+quadFit_resid<-ts(residuals(quadFit),frequency=12, start=c(1956,1)) 
+plot(quadFit_resid, main="Residuals from a Quadratic Trend Fit")
+abline(h=0)
+
+cubicFit<-lm(beerTS~t+t2+t3)
+summary(cubicFit)
+
+#### plot the data and the fitted quadratic trend function
+plot(x=1:length(beerTS),y=beerTS,type='o',ylab="",xlab="Time - Number of Months Since Jan 1956",main="Cubic Fit on Beer Production Data")
+curve(expr = coef(cubicFit)[1]+coef(cubicFit)[2]*x+coef(cubicFit)[3]*x^2+coef(cubicFit)[4]*x^3,lty=1,add = TRUE, col="red")
+
+cubicFit_resid<-ts(residuals(cubicFit),frequency=12, start=c(1956,1)) 
+plot(cubicFit_resid, main="Residuals from a Cubic Trend Fit")
+abline(h=0)
+
+order4polyFit<-lm(beerTS~t+t2+t3+t4)
+summary(order4polyFit)
+
+#### plot the data and the fitted 4th order polynomial trend function
+plot(x=1:length(beerTS),y=beerTS,type='o',ylab="",xlab="Time - Number of Months Since Jan 1956",main="order4poly Fit on Beer Production Data")
+curve(expr = coef(order4polyFit)[1]+coef(order4polyFit)[2]*x+coef(order4polyFit)[3]*x^2+coef(order4polyFit)[4]*x^3+coef(order4polyFit)[5]*x^4,lty=1,add = TRUE, col="red")
+
+order4polyFit_resid<-ts(residuals(order4polyFit),frequency=12, start=c(1956,1)) 
+plot(order4polyFit_resid, main="Residuals from a order4poly Trend Fit")
+abline(h=0)
+
+order5polyFit<-lm(beerTS~t+t2+t3+t4+t5)
+summary(order5polyFit)
+
+#### plot the data and the fitted 5th order polynomial trend function
+plot(x=1:length(beerTS),y=beerTS,type='o',ylab="",xlab="Time - Number of Months Since Jan 1956",main="order5poly Fit on Beer Production Data")
+curve(expr = coef(order5polyFit)[1]+coef(order5polyFit)[2]*x+coef(order5polyFit)[3]*x^2+coef(order5polyFit)[4]*x^3+coef(order5polyFit)[5]*x^4+coef(order5polyFit)[6]*x^5,lty=1,add = TRUE, col="red")
+
+order5polyFit_resid<-ts(residuals(order5polyFit),frequency=12, start=c(1956,1)) 
+plot(order5polyFit_resid, main="Residuals from a order5poly Trend Fit")
+abline(h=0)
+
+```
+
+It looks like a 4th order polynomial might take care of the worst of it, the question is are we okay with using a 4th order polynomial or should we drop it down to a cubic function and just deal with it? I found population data and I would be interested to see if we can find a good correlation there (total population won't work, I already looked at that, but maybe a specific age group?)
+
+Assume we go with the 4th order polynomial for now. Let's see what we can do about the seasonality with a seasonal means model
+
+```{r}
+library(TSA)
+month=season(order4polyFit_resid)
+seasMeansModel<-lm(order4polyFit_resid~month)
+summary(seasMeansModel)
+seasMeansModel_resid<-ts(residuals(seasMeansModel),frequency=12, start=c(1956,1)) 
+plot(seasMeansModel_resid, main="Residuals from Seasonal Means Model \n(after fitting 4th order polynomial)")
+abline(h=0)
+```
+
+With an adjusted R-squared value of 71%, this is looking pretty good, but in the residual plot you can still the the variance increasing over time. In addition, there is a noticeable "wave" in the residuals that starts around 1970, but I'm not sure what to do about that yet. For now, let's go back, log the data, and apply both the 4th order polynomial and the seasonal means model at the same time. 
+
+```{r}
+logBeer<-log(beerTS)
+t<-1:length(logBeer)
+t2<-t^2
+t3<-t^3
+t4<-t^4
+month<-season(logBeer)
+
+logSeasPoly<-lm(logBeer~t+t2+t3+t4+month)
+summary(logSeasPoly)
+
+logSeasPoly_resid<-ts(residuals(logSeasPoly),frequency=12, start=c(1956,1)) 
+plot(logSeasPoly_resid, main="Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time")
+abline(h=0)
+
+```
+
+The variance looks a little better, we still have that wave we should definitely look at, maybe differencing would take care of it?
+```{r}
+plot(diff(logSeasPoly_resid), main="Differenced Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time")
+abline(h=0)
+```
+
+Now it looks pretty except for a couple outliers. Let's work with this then. 
+
+So to summarize what we've done so far
+
+1) Logged data
+
+2) Fit 4th order polynomial and seasonal means at the same time
+
+3) Differenced residuals from step 2
+
+We will rename this series beer2 for convienence 
+```{r}
+beer2TS<-diff(logSeasPoly_resid)
+```
+
+Let's look to see if our new series is stationary according to the Augmented Dickey-Fuller Test and a Phillips-Perron Test
+```{r}
+# d
+adf.test(beer2TS)
+pp.test(beer2TS)
+
+```
+
+In both we have small p-values, so we should reject the null hypothesis (that the series is not stationary), so we conclude that our transformed series is stationary. 
+
+Now we need to determine p and q
+```{r}
+# p & q
+par(mfrow=c(1,2))
+acf(beer2TS)
+pacf(beer2TS)
+par(mfrow=c(1,1))
+eacf(beer2TS)
+```
+
+Well clearly this is a mess. The pacf appears to be decreasing nicely as we would like, however the acf doesn't appear to be decreasing at all. Needs to be investigated further, but not tonight. 
