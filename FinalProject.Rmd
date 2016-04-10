@@ -129,14 +129,34 @@ logSeasPoly<-lm(logBeer~t+t2+t3+t4+month)
 summary(logSeasPoly)
 
 logSeasPoly_resid<-ts(residuals(logSeasPoly),frequency=12, start=c(1956,1)) 
-plot(logSeasPoly_resid, main="Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time")
+plot(logSeasPoly_resid, main="Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time", type="l")
+points(y=logSeasPoly_resid, x=time(logSeasPoly_resid), pch=as.vector(season(logSeasPoly_resid)))
 abline(h=0)
 
 ```
 
+Let's take a look and see if we have a stationary series yet
+```{r}
+# d
+adf.test(logSeasPoly_resid)
+pp.test(logSeasPoly_resid)
+
+```
+
+
+```{r}
+# p & q
+par(mfrow=c(1,2))
+acf(logSeasPoly_resid, lag.max=200)
+pacf(logSeasPoly_resid, lag.max=200)
+par(mfrow=c(1,1))
+eacf(logSeasPoly_resid)
+```
+
 The variance looks a little better, we still have that wave we should definitely look at, maybe differencing would take care of it?
 ```{r}
-plot(diff(logSeasPoly_resid), main="Differenced Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time")
+plot(diff(logSeasPoly_resid), main="Differenced Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time", type="l")
+points(y=diff(logSeasPoly_resid), x=time(diff(logSeasPoly_resid)), pch=as.vector(season(diff(logSeasPoly_resid))))
 abline(h=0)
 ```
 
