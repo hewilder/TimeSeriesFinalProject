@@ -13,7 +13,7 @@ Change working directory here
 library(TSA)
 
 #Hannah
-setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalProject")
+setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalProject/TimeSeriesFinalProject")
 
 #Chathura
 #setwd()
@@ -32,9 +32,9 @@ beerTS<-ts(beerData[1:(nrow(beerData)-1),2], frequency=12, start=c(1956,1))
 
 ```{r}
 #load population data
-pop_totalData<-read.csv("Pop_total.csv", row.names=1)
-pop_total<-t(pop_totalData["Total",])
-pop_totalTS<-ts(pop_total[,1], frequency=1, start=c(1921))
+#pop_totalData<-read.csv("Pop_total.csv", row.names=1)
+#pop_total<-t(pop_totalData["Total",])
+#pop_totalTS<-ts(pop_total[,1], frequency=1, start=c(1921))
 ```
 
 #Plot data
