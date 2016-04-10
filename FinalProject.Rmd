@@ -53,6 +53,15 @@ seasonplot(beerTS,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarte
 
 In the plot we see obvious seasonality with higher production in November and December and lower production in June and July. There is a trend which may be difficult to fit as it doesn't appear to be a "well known" function like a linear or quadratic function, so we'll have to experiment. It also looks like the variance of the data is larger in the middle, so we will probably want to take the log of our data to correct that varaince issue. 
 
+#Decompsing the time series to see trends and patterns
+```{r}
+decompbeer = decompose (beerTS, type="additive")
+plot (decompbeer)
+```
+
+by looking at the decomposed figures,i was wondering what if we plot a harmonic function with a quadradit polynomial... like imposing a sine curve with 2nd order poly ?
+
+
 
 
 
@@ -205,3 +214,5 @@ eacf(beer2TS)
 ```
 
 Well clearly this is a mess. The pacf appears to be decreasing nicely as we would like, however the acf doesn't appear to be decreasing at all. Needs to be investigated further, but not tonight. 
+
+If we do AR model with lag 12 it shold take care of acf rt ? Im not sure how to do it though.
