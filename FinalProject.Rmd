@@ -17,7 +17,7 @@ setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalPr
 
 #Chathura
 #test
-setwd("./")
+#setwd("./")
 ```
 
 
@@ -164,55 +164,29 @@ pp.test(logSeasPoly_resid)
 
 ```{r}
 # p & q
-par(mfrow=c(1,2))
-acf(logSeasPoly_resid, lag.max=200)
-pacf(logSeasPoly_resid, lag.max=200)
+par(mfrow=c(1,1))
+acf(logSeasPoly_resid, lag.max=100)
+pacf(logSeasPoly_resid, lag.max=100)
 par(mfrow=c(1,1))
 eacf(logSeasPoly_resid)
 ```
 
-The variance looks a little better, we still have that wave we should definitely look at, maybe differencing would take care of it?
-```{r}
-plot(diff(logSeasPoly_resid), main="Differenced Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time", type="l")
-points(y=diff(logSeasPoly_resid), x=time(diff(logSeasPoly_resid)), pch=as.vector(season(diff(logSeasPoly_resid))))
+Try an AR(12) model and examine residuals
+```{r fig.width=8, fig.height=8}
+ar12<-arima(logSeasPoly_resid, order=c(12,0,0))
+tsdiag(ar12)
+
+#residuals
+ar12_resid<-ts(residuals(ar12), frequency=12, start=c(1956,1)) 
+plot(ar12_resid, main="AR 12 model Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time", type="l")
+points(y=ar12_resid, x=time(ar12_resid), pch=as.vector(season(ar12_resid)))
 abline(h=0)
+
+par(mfrow=c(2,1))
+acf(ar12_resid)
+pacf(ar12_resid)
+
+pacf_acf<-data.frame(acfVal=acf(ar12_resid, plot=FALSE)$acf, pacfVal=pacf(ar12_resid, plot=FALSE)$acf)
+print(pacf_acf)
 ```
 
-Now it looks pretty except for a couple outliers. Let's work with this then. 
-
-So to summarize what we've done so far
-
-1) Logged data
-
-2) Fit 4th order polynomial and seasonal means at the same time
-
-3) Differenced residuals from step 2
-
-We will rename this series beer2 for convienence 
-```{r}
-beer2TS<-diff(logSeasPoly_resid)
-```
-
-Let's look to see if our new series is stationary according to the Augmented Dickey-Fuller Test and a Phillips-Perron Test
-```{r}
-# d
-adf.test(beer2TS)
-pp.test(beer2TS)
-
-```
-
-In both we have small p-values, so we should reject the null hypothesis (that the series is not stationary), so we conclude that our transformed series is stationary. 
-
-Now we need to determine p and q
-```{r}
-# p & q
-par(mfrow=c(1,2))
-acf(beer2TS)
-pacf(beer2TS)
-par(mfrow=c(1,1))
-eacf(beer2TS)
-```
-
-Well clearly this is a mess. The pacf appears to be decreasing nicely as we would like, however the acf doesn't appear to be decreasing at all. Needs to be investigated further, but not tonight. 
-
-If we do AR model with lag 12 it shold take care of acf rt ? Im not sure how to do it though.
