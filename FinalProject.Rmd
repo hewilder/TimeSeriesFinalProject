@@ -25,9 +25,13 @@ Load data (assumes file is in working directory)
 ```{r}
 #load the data
 beerData<-read.csv("monthly-beer-production-in-austr.csv")
-# 
-#turn into time series (cuts off last entry which is NA)
-beerTS<-ts(beerData[1:(nrow(beerData)-1),2], frequency=12, start=c(1956,1))
+
+#cut off the last row which is NA
+beerData<-beerData[-nrow(beerData),]
+
+#turn into time series also hold back the last two years of data for forecasting
+beerTS<-ts(beerData[1:(nrow(beerData)-24),2], frequency=12, start=c(1956,1))
+beer_forecast<-ts(beerData[(nrow(beerData)-23):nrow(beerData), 2], start=c(1993,9), frequency=12)
 ```
 
 
@@ -40,12 +44,14 @@ beerTS<-ts(beerData[1:(nrow(beerData)-1),2], frequency=12, start=c(1956,1))
 
 #Plot data
 ```{r}
+par(mfrow=c(1,1))
 plot(beerTS, main="Beer Production in Australia by Month")
 
 plot(beerTS, main="Beer Production in Australia by Month (seasons marked)", type="l")
 points(y=beerTS, x=time(beerTS), pch=as.vector(season(beerTS)))
 ```
-#another plot to show seasonality
+
+#Another plot to show seasonality
 ```{r}
 require(fpp)
 seasonplot(beerTS,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarterly beer production", col=rainbow(20), pch=19)
@@ -60,9 +66,6 @@ plot (decompbeer)
 ```
 
 by looking at the decomposed figures,i was wondering what if we plot a harmonic function with a quadradit polynomial... like imposing a sine curve with 2nd order poly ?
-
-
-
 
 
 #Try to figure out deterministic trend
@@ -173,8 +176,21 @@ eacf(logSeasPoly_resid)
 
 Try an AR(12) model and examine residuals
 ```{r fig.width=8, fig.height=8}
-ar12<-arima(logSeasPoly_resid, order=c(12,0,0))
-tsdiag(ar12)
+#Set up external regressors and dummy vars
+library(forecast)
+monthDummies<-seasonaldummy(logBeer)
+externReg<-data.frame(t, t2, t3, t4, monthDummies)
+
+ar12_poly<-arima(logBeer, order=c(12,0,0), xreg=externReg)
+ar12_poly
+```
+
+We seem to be having trouble getting fits for the trend line, ask about this Monday, try just using the month dummies.
+
+```{r}
+ar12<-arima(logBeer, order=c(12,0,0), xreg=monthDummies)
+ar12
+tsdiag(ar12, gof.lag=20)
 
 #residuals
 ar12_resid<-ts(residuals(ar12), frequency=12, start=c(1956,1)) 
@@ -187,6 +203,88 @@ acf(ar12_resid)
 pacf(ar12_resid)
 
 pacf_acf<-data.frame(acfVal=acf(ar12_resid, plot=FALSE)$acf, pacfVal=pacf(ar12_resid, plot=FALSE)$acf)
-print(pacf_acf)
+#print(pacf_acf)
+```
+
+
+#After we choose a model, run all of the diagnostic tests
+
+```{r fig.width=7, fig.height=4}
+chosenMod<-ar12
+modelString<-"SARIMA(12,0,0)(0,0,0)[12]"
+
+par(mfrow=c(1,1))
+plot(residuals(chosenMod), main=paste("Residuals of Model", modelString))
+abline(h=0)
+
+```
+
+_Comment:_ 
+
+```{r fig.width=7, fig.height=4}
+par(mfrow=c(1,1))
+qqnorm(residuals(chosenMod), main=paste("Normal QQ Plot of Residuals from", modelString))
+qqline(residuals(chosenMod))
+
+```
+
+_Comment:_ 
+
+```{r fig.width=7, fig.height=4}
+par(mfrow=c(1,1))
+acf(residuals(chosenMod), main=paste("ACF of Residuals from", modelString))
+```
+
+_Comment:_ 
+
+
+```{r fig.width=7, fig.height=4}
+shapiro.test(residuals(chosenMod))
+
+```
+
+_Comment:_ 
+
+```{r fig.width=7, fig.height=4}
+LB.test(chosenMod, lag=24)
+```
+
+_Comment:_ 
+
+#Make the forecasts
+Set up external regressor data frame
+```{r}
+newMonthDummy<-seasonaldummy(beer_forecast)
+```
+
+
+#Plot the model forecasts
+
+```{r}
+library(TSA)
+
+TSA::plot.Arima(chosenMod,n.ahead=24,n1=c(1956,1), newxreg=newMonthDummy,
+type='b',ylab='Logged Beer Production (Megalitres)',xlab='Year', col="red", lty=2, cex=.75)
+
+predictions<-predict(chosenMod, newxreg=newMonthDummy, n.ahead=24)
+pred<-predictions$pred
+uci<-pred+2*predictions$se
+lci<-pred-2*predictions$se
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,ylim=c(ymin,ymax),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,xlim=c(1993, 1996), ylim=c(4.5,5.5),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+lines(log(beer_forecast), col="black")
+
 ```
 
