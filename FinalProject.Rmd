@@ -3,6 +3,7 @@ title: "Final Project"
 author: "Hannah Wilder and Chathura Gunasekara"
 date: "April 9, 2016"
 output: pdf_document
+geometry: margin=.5in
 ---
 
 Notes:
@@ -28,6 +29,7 @@ beerData<-read.csv("monthly-beer-production-in-austr.csv")
 
 #cut off the last row which is NA
 beerData<-beerData[-nrow(beerData),]
+colnames(beerData)<-c("Month", "Production")
 
 #turn into time series also hold back the last two years of data for forecasting
 beerTS<-ts(beerData[1:(nrow(beerData)-24),2], frequency=12, start=c(1956,1))
@@ -35,12 +37,46 @@ beer_forecast<-ts(beerData[(nrow(beerData)-23):nrow(beerData), 2], start=c(1993,
 ```
 
 
-```{r}
+#Investigate possible deterministic relationship with population data
+
+```{r, fig.width=4, fig.height=2}
 #load population data
-#pop_totalData<-read.csv("Pop_total.csv", row.names=1)
-#pop_total<-t(pop_totalData["Total",])
-#pop_totalTS<-ts(pop_total[,1], frequency=1, start=c(1921))
+library(reshape)
+library(ggplot2)
+
+#Clean up population data
+pop_totalData<-t(read.csv("Pop_total.csv", row.names=1))
+dropCols<-colnames(pop_totalData) %in% c("Unspecified","Period not indicated")
+rownames(pop_totalData)<-c(1921:2011)
+pop_totalData<-pop_totalData[paste(1956:1995),!dropCols]
+
+#Aggregate beer data
+beerYear<-seq(from=1956, to=1996, by=1)
+beerYear<-rep(beerYear, each=12)
+beerYear<-beerYear[1:nrow(beerData)]
+beerAg<-aggregate(beerData[,2], FUN=mean, by=list(year=beerYear))
+
+#Attach to beer data
+beerPop<-data.frame(cbind(beer=beerAg[,2],pop_totalData))
+beerPopScale<-scale(beerPop)
+
+beerPopRes<-melt(beerPopScale, variable.name="series")
+colnames(beerPopRes)<-c("time", "series", "stddev")
+
+allNames<-colnames(beerPop)[2:length(colnames(beerPop))]
+
+par(mfrow=c(2,2))
+for (name in allNames) {
+  subset_data<-subset(beerPopRes, beerPopRes$series%in%c("beer", name))
+  newPlot<-ggplot(subset_data, aes(time,stddev)) + geom_line(aes(colour = series)) +ggtitle(paste("Pop (age group ",name,") and Beer Prod"))
+  print(newPlot)
+}
+par(mfrow=c(1,1))
+
+
 ```
+
+It appears that there may be a relationship with the 15-19 age block, which makes sense since the legal drinking age is 18. We may be able to use this as our deterministic trend. 
 
 #Plot data
 ```{r}
