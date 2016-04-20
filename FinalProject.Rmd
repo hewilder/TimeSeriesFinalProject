@@ -36,8 +36,34 @@ beerTS<-ts(beerData[1:(nrow(beerData)-24),2], frequency=12, start=c(1956,1))
 beer_forecast<-ts(beerData[(nrow(beerData)-23):nrow(beerData), 2], start=c(1993,9), frequency=12)
 ```
 
+#Plot data
+```{r}
+par(mfrow=c(1,1))
+plot(beerTS, main="Beer Production in Australia by Month")
 
-#Investigate possible deterministic relationship with population data
+plot(beerTS, main="Beer Production in Australia by Month (seasons marked)", type="l")
+points(y=beerTS, x=time(beerTS), pch=as.vector(season(beerTS)))
+```
+
+#Another plot to show seasonality
+```{r warning=FALSE, message=FALSE}
+require(fpp)
+seasonplot(beerTS,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarterly beer production", col=rainbow(20), pch=19)
+```
+
+In the plot we see obvious seasonality with higher production in November and December and lower production in June and July. There is a trend which may be difficult to fit as it doesn't appear to be a "well known" function like a linear or quadratic function, so we'll have to experiment. It also looks like the variance of the data is larger in the middle, so we will probably want to take the log of our data to correct that varaince issue. 
+
+#Decompsing the time series to see trends and patterns
+```{r}
+decompbeer = decompose (beerTS, type="additive")
+plot (decompbeer)
+```
+
+by looking at the decomposed figures,i was wondering what if we plot a harmonic function with a quadradit polynomial... like imposing a sine curve with 2nd order poly ?
+
+
+
+#Investigate possible relationship with population data
 
 ```{r, fig.width=4, fig.height=2}
 #load population data
@@ -48,6 +74,7 @@ library(ggplot2)
 pop_totalData<-t(read.csv("Pop_total.csv", row.names=1))
 dropCols<-colnames(pop_totalData) %in% c("Unspecified","Period not indicated")
 rownames(pop_totalData)<-c(1921:2011)
+pop_totalDataLong<-pop_totalData[,!dropCols]
 pop_totalData<-pop_totalData[paste(1956:1995),!dropCols]
 
 #Aggregate beer data
@@ -65,6 +92,7 @@ colnames(beerPopRes)<-c("time", "series", "stddev")
 
 allNames<-colnames(beerPop)[2:length(colnames(beerPop))]
 
+#Plot data for each age group and beer data on same plot
 par(mfrow=c(2,2))
 for (name in allNames) {
   subset_data<-subset(beerPopRes, beerPopRes$series%in%c("beer", name))
@@ -73,35 +101,47 @@ for (name in allNames) {
 }
 par(mfrow=c(1,1))
 
-
+#Make a model based on the 15-19 age group
+yearModel1<-lm(beer ~ X15.19, data=beerPop)
 ```
 
-It appears that there may be a relationship with the 15-19 age block, which makes sense since the legal drinking age is 18. We may be able to use this as our deterministic trend. 
+It appears that there may be a relationship with the 15-19 age block, which makes sense since the legal drinking age is 18. We may be able to use this to remove some of our trend. However, the 10-14 age group numbers look like they might have potential if shifted forward a few years. This makes sense since these children will grow up and start drinking beer. 
 
-#Plot data
+
 ```{r}
-par(mfrow=c(1,1))
-plot(beerTS, main="Beer Production in Australia by Month")
+#Explore lagged x10.14 data
+laggedData<-data.frame(beer=beerAg[,2])
+models<-list()
+modelRsq<-c()
+for (lag in 0:8) {
+  newColNames<-c(colnames(laggedData), paste("lag", lag, sep=""))
+  newLag<-pop_totalDataLong[paste(1956:1995-lag), "10-14"]
+  laggedData<-data.frame(laggedData, newLag)
+  newModel<-lm(beer ~ newLag, data=laggedData)
+  models[[paste("lag", lag, sep="")]]<-newModel
+  modelRsq<-c(modelRsq, summary(newModel)$r.squared)
+  colnames(laggedData)<-newColNames
+  
+}
 
-plot(beerTS, main="Beer Production in Australia by Month (seasons marked)", type="l")
-points(y=beerTS, x=time(beerTS), pch=as.vector(season(beerTS)))
+plot(modelRsq, main="R Squared Values for lags of 10-14 age group", xlab="lag number", ylab="R squared value")
+abline(v=6, lty=2)
+
+lagDataScale<-scale(laggedData)[,c(1,8)]
+lagDataMelt<-melt(lagDataScale, variable.name="series")
+colnames(lagDataMelt)<-c("time", "series", "stddev")
+
+newPlot<-ggplot(lagDataMelt, aes(time,stddev)) + geom_line(aes(colour = series)) +ggtitle(paste("Lags of 10-14 Pop and Beer Prod"))
+print(newPlot)
+
+plot(ts(residuals(models[["lag6"]]), frequency=1, start=c(1956)), main="Residuals from modeling beer production with 10-14 lag 6", ylab="Residual")
+abline(h=0)
+
 ```
 
-#Another plot to show seasonality
-```{r}
-require(fpp)
-seasonplot(beerTS,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarterly beer production", col=rainbow(20), pch=19)
-```
+We see that lag 6 is the optimal lag in terms of R-squared values. This makes sense because in 6 years, this age group will be 16-20, or right around drinking age. We can see in the residuals that it isn't perfect, but this pattern may be easier to model than what we had before, it looks much more like a regular polynomial. 
+ 
 
-In the plot we see obvious seasonality with higher production in November and December and lower production in June and July. There is a trend which may be difficult to fit as it doesn't appear to be a "well known" function like a linear or quadratic function, so we'll have to experiment. It also looks like the variance of the data is larger in the middle, so we will probably want to take the log of our data to correct that varaince issue. 
-
-#Decompsing the time series to see trends and patterns
-```{r}
-decompbeer = decompose (beerTS, type="additive")
-plot (decompbeer)
-```
-
-by looking at the decomposed figures,i was wondering what if we plot a harmonic function with a quadradit polynomial... like imposing a sine curve with 2nd order poly ?
 
 
 #Try to figure out deterministic trend
