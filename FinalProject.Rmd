@@ -57,6 +57,8 @@ In the plot we see obvious seasonality with higher production in November and De
 ```{r}
 decompbeer = decompose (beerTS, type="additive")
 plot (decompbeer)
+
+monthplot(beerTS, main="Decomposition of Series by Month")
 ```
 
 by looking at the decomposed figures,i was wondering what if we plot a harmonic function with a quadradit polynomial... like imposing a sine curve with 2nd order poly ?
@@ -137,12 +139,170 @@ print(newPlot)
 plot(ts(residuals(models[["lag6"]]), frequency=1, start=c(1956)), main="Residuals from modeling beer production with 10-14 lag 6", ylab="Residual")
 abline(h=0)
 
+lag6_resid<-ts(residuals(models[["lag6"]]), frequency=1, start=c(1956))
+adf.test(laggedData$beer)
+acf(laggedData$beer)
+pacf(laggedData$beer)
+ar1YearlyModel<-arima(laggedData$beer, order=c(1,1,0), xreg=laggedData$lag6)
+
 ```
 
 We see that lag 6 is the optimal lag in terms of R-squared values. This makes sense because in 6 years, this age group will be 16-20, or right around drinking age. We can see in the residuals that it isn't perfect, but this pattern may be easier to model than what we had before, it looks much more like a regular polynomial. 
+
+We can model just the yearly trend, but this isn't a stationary model, so we want to try to model the monthly data with the seasonality. 
  
+If we are interested in modeling the seasonal trend in our data, we would need to extend the population data to a monthly series. To do this, we need to assume that the population will change at about the same rate over the year or that it will remain approximately constant over a year. In this case we will choose to assume that the population will change at about the same rate over the year. This may not be true if there is a particular month in which there is a high influx of immigrants, however it seems reasonable to assume that the majority of the population from year to year is composed of people who were in Australia the previous year (source for net migration rate preferrably broken up by age group needed).  
+#Interpolate Monthly Numbers
+```{r}
+library(zoo)
 
+#Create a vector with missing values for zoo to interpolate
+withNA<-c()
+for (year in 1:nrow(laggedData)) {
+  withNA<-c(withNA, laggedData$lag6[year], rep(NA, 11))
+}
 
+#Interpolate values using zoo library
+zooSeries<-zoo(withNA, frequency=12)
+wAppx<-na.approx(zooSeries, na.rm=FALSE)
+monthlyLag6<-wAppx
+
+#Reattach to beer numbers for plotting
+beerPopMonth<-data.frame(beer=beerTS, lag6_10_14=monthlyLag6[1:length(beerTS)])
+rownames(beerPopMonth)<-round(seq(from=1956, length.out=length(beerTS), by=1/12),2)
+scaleMonth<-scale(beerPopMonth)
+scaleMonthMelt<-melt(scaleMonth, variable.name="series")
+colnames(scaleMonthMelt)<-c("time", "series", "stddev")
+
+#Make a pretty plot
+newPlot<-ggplot(scaleMonthMelt, aes(time,stddev)) + geom_line(aes(colour = series)) +ggtitle(paste("Lag 6 of 10-14 Pop and Beer Prod"))
+print(newPlot)
+```
+
+Now we are ready to investigate models using the population numbers
+
+```{r}
+monthlyPopModel<-lm(beer ~ lag6_10_14, data=beerPopMonth)
+summary(monthlyPopModel)
+
+residFromPop<-ts(residuals(monthlyPopModel), frequency=12, start=c(1956,1))
+plot(residFromPop)
+
+```
+
+We notice that there still appears to be pattern in the residuals and that the variance appears to be larger at later lags, so the first thing we should do is log the beer data to fix the variance problem. We can also try to fit the remainder of the pattern with a polynomial
+
+```{r}
+logBeer<-log(beerPopMonth$beer)
+lag6_10_14<-beerPopMonth$lag6_10_14
+t<-1:length(beerTS)
+t2<-t^2
+t3<-t^3
+t4<-t^4
+monthlyPopModel_log<-lm(logBeer ~ lag6_10_14+t+t2+t3+t4)
+summary(monthlyPopModel_log)
+
+residFromPop_log<-ts(residuals(monthlyPopModel_log), frequency=12, start=c(1956,1))
+plot(residFromPop_log)
+```
+
+Obviously there is a pattern in the residuals here, so we can either try to fit the remainder of the trend or continue on and count that as error in favor of a more simple model. For now we will continue on, but remember to check the residuals of any model we come up with.
+
+```{r}
+adf.test(residFromPop_log)
+pp.test(residFromPop_log)
+acf(residFromPop_log)
+pacf(residFromPop_log)
+eacf(residFromPop_log)
+```
+
+Based on the pacf plot, perhaps p=1, P=1 in an SARIMA(1,0,0)(1,0,0)[12]
+
+Write up a quick function for plotting acf and pacf of residuals
+```{r}
+getModelString<-function(model) {
+  modSpec<-model$arma
+  modelString<-paste("SARIMA(", modSpec[1],",", modSpec[6], ",", modSpec[2],")(", modSpec[3], ",", modSpec[7], ",", modSpec[4],")[", modSpec[5],"]", sep="")
+  
+  return(modelString)
+}
+
+plotResid<-function(model) {
+  residuals<-ts(residuals(model), frequency=12, start=c(1956,1))
+  modelString<-getModelString(model)
+  par(mfrow=c(2,1))
+  acf(residuals, main=paste("ACF of", modelString), lag.max=40, cex=.5)
+  pacf(residuals, main=paste("PACF of", modelString), lag.max=40, cex=.5)
+  par(mfrow=c(1,1))
+}
+
+```
+
+```{r}
+popModel1<-arima(residFromPop_log, order=c(1,0,0), seasonal=list(order=c(2,0,0), period=6))
+plotResid(popModel1)
+```
+
+There is still a significant autocorrelation at lag 12 in both plots. Perhaps try either p=12 or q=12?
+
+```{r}
+popModel2<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,0), period=12))
+plotResid(popModel2)
+tsdiag(popModel2)
+
+popModel3<-arima(residFromPop_log, order=c(1,0,12), seasonal=list(order=c(1,0,0), period=12))
+plotResid(popModel3)
+tsdiag(popModel3)
+```
+
+That definitely looks better, we still have significant lags, but they now lie very close to the boundary. This is true more so for the SARIMA(12,0,0)(1,0,0)[12] model than the SARIMA(0,0,12)(1,0,0)[12] model. 
+
+Try overfitting the SARIMA(12,0,0)(1,0,0)[12]
+```{r}
+#popModel4<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(1,0,0), period=12))
+#Produces error
+
+popModel5<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(1,0,0), period=12))
+popModel5
+
+popModel6<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,0), period=12))
+popModel6
+
+popModel7<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,1), period=12))
+popModel7
+```
+
+We see that the extra coefficients added in models 6 (`r getModelString(popModel6)`) and 7 (`r getModelString(popModel7)`) are both significant, so we try adding them to the model together.
+
+```{r}
+popModel8<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,1), period=12))
+popModel8
+```
+
+With both together, the sar2 coefficent is no longer significant, overfit model 7 (`r getModelString(popModel7)`)
+
+```{r}
+popModel9<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(1,0,1), period=12))
+popModel9
+
+popModel10<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(1,0,1), period=12))
+popModel10
+
+popModel11<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,2), period=12))
+popModel11
+```
+
+The new coefficients are not significant (with the exception of model 9, which appears to have some issues with fitting), suggesting that we should stick with model 7 (or possibly 8).
+
+Let auto.arima choose a model
+
+```{r}
+autoRes<-auto.arima(residFromPop_log, max.p=13, max.order=14, test="adf")
+autoRes
+plotResid(autoRes)
+```
+
+auto.arima chose `r getModelString(autoRes)` but this model still has the same problems as the others we have tried so far (error terms not independent) and the AIC is larger than models 7 and 8, so the only reason we would want to consider this model is if we were really interested in a more parsimonious model. 
 
 #Try to figure out deterministic trend
 ```{r}
@@ -286,8 +446,8 @@ pacf_acf<-data.frame(acfVal=acf(ar12_resid, plot=FALSE)$acf, pacfVal=pacf(ar12_r
 #After we choose a model, run all of the diagnostic tests
 
 ```{r fig.width=7, fig.height=4}
-chosenMod<-ar12
-modelString<-"SARIMA(12,0,0)(0,0,0)[12]"
+chosenMod<-popModel8
+modelString<-getModelString(chosenMod)
 
 par(mfrow=c(1,1))
 plot(residuals(chosenMod), main=paste("Residuals of Model", modelString))
@@ -322,7 +482,7 @@ shapiro.test(residuals(chosenMod))
 _Comment:_ 
 
 ```{r fig.width=7, fig.height=4}
-LB.test(chosenMod, lag=24)
+LB.test(chosenMod, lag=35)
 ```
 
 _Comment:_ 
