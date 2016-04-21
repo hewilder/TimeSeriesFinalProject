@@ -396,10 +396,10 @@ abline(h=0)
 ```
 
 ```{r}
-har.=harmonic(logBeer,1)
+har.=harmonic(logBeer,5)
 modelHR=lm(logBeer~har.+t+t2+t3+t4)
 summary(modelHR)
-plot(ts(fitted(modelHR),freq=12,start=c(1956,1)),ylab='Beer',type='l',ylim=range(c(fitted(modelHR),logBeer))); 
+plot(ts(fitted(modelHR),freq=12,start=c(1956,1)),ylab='log Beer',type='l',ylim=range(c(fitted(modelHR),logBeer))); 
 points(logBeer)
 residFromHR<-ts(residuals(modelHR), frequency=12, start=c(1956,1))
 plot(residFromHR)
