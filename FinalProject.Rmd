@@ -372,6 +372,8 @@ colnames(newRegData)<-c("lag6_10_14", colnames(newRegData)[2:5])
 
 predFromPop<-predict(monthlyPopModel_log, newdata=newRegData)
 
+
+
 ```
 
 
@@ -385,6 +387,9 @@ predictions<-predict(chosenMod, n.ahead=24)
 pred<-predictions$pred+predFromPop
 uci<-pred+2*predictions$se
 lci<-pred-2*predictions$se
+
+#Calculate sum squared error
+sumSqErrPop<-sum((log(beer_forecast)-pred)^2)
 
 ymin=min(c(as.vector(lci),logBeer))-1
 ymax=max(c(as.vector(uci),logBeer))+1
