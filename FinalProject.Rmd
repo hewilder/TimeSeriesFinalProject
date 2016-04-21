@@ -14,7 +14,7 @@ Change working directory here
 library(TSA)
 
 #Hannah
-setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalProject/TimeSeriesFinalProject")
+#setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalProject/TimeSeriesFinalProject")
 
 #Chathura
 #test
@@ -34,6 +34,7 @@ colnames(beerData)<-c("Month", "Production")
 #turn into time series also hold back the last two years of data for forecasting
 beerTS<-ts(beerData[1:(nrow(beerData)-24),2], frequency=12, start=c(1956,1))
 beer_forecast<-ts(beerData[(nrow(beerData)-23):nrow(beerData), 2], start=c(1993,9), frequency=12)
+
 ```
 
 #Plot data
@@ -60,11 +61,8 @@ In the plot we see obvious seasonality with higher production in November and De
 decompbeer = decompose (beerTS, type="additive")
 plot (decompbeer)
 
-monthplot(beerTS, main="Decomposition of Series by Month")
+#monthplot(beerTS, main="Decomposition of Series by Month")
 ```
-
-by looking at the decomposed figures,i was wondering what if we plot a harmonic function with a quadradit polynomial... like imposing a sine curve with 2nd order poly ?
-
 
 
 #Investigate possible relationship with population data
@@ -213,6 +211,9 @@ abline(h=0)
 ```
 
 Obviously there is a pattern in the residuals here, so we can either try to fit the remainder of the trend or continue on and count that as error in favor of a more simple model. For now we will continue on, but remember to check the residuals of any model we come up with.
+
+
+
 
 ```{r}
 adf.test(residFromPop_log)
@@ -368,6 +369,8 @@ It looks like a 4th order polynomial might take care of the worst of it, the que
 
 Assume we go with the 4th order polynomial for now. Let's see what we can do about the seasonality with a seasonal means model
 
+
+
 ```{r}
 library(TSA)
 month=season(order4polyFit_resid)
@@ -398,6 +401,17 @@ abline(h=0)
 
 ```
 
+```{r}
+har.=harmonic(logBeer,1)
+modelHR=lm(logBeer~har.+t+t2+t3+t4)
+summary(modelHR)
+plot(ts(fitted(modelHR),freq=12,start=c(1956,1)),ylab='Beer',type='l',ylim=range(c(fitted(modelHR),logBeer))); 
+points(logBeer)
+residFromHR<-ts(residuals(modelHR), frequency=12, start=c(1956,1))
+plot(residFromHR)
+
+```
+
 Let's take a look and see if we have a stationary series yet
 ```{r}
 # d
@@ -409,12 +423,14 @@ pp.test(logSeasPoly_resid)
 
 ```{r}
 # p & q
-par(mfrow=c(1,1))
+par(mfrow=c(1,2))
 acf(logSeasPoly_resid, lag.max=100)
 pacf(logSeasPoly_resid, lag.max=100)
 par(mfrow=c(1,1))
 eacf(logSeasPoly_resid)
 ```
+
+
 
 Try an AR(12) model and examine residuals
 ```{r fig.width=8, fig.height=8}
