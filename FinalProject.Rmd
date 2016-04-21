@@ -35,10 +35,14 @@ colnames(beerData)<-c("Month", "Production")
 beerTS<-ts(beerData[1:(nrow(beerData)-24),2], frequency=12, start=c(1956,1))
 beer_forecast<-ts(beerData[(nrow(beerData)-23):nrow(beerData), 2], start=c(1993,9), frequency=12)
 
+
+
+
 ```
 
 #Plot data
 ```{r}
+library(TSA)
 par(mfrow=c(1,1))
 plot(beerTS, main="Beer Production in Australia by Month")
 
@@ -399,6 +403,24 @@ plot(logSeasPoly_resid, main="Residuals from Logged Beer\nseasonal Means and 4th
 points(y=logSeasPoly_resid, x=time(logSeasPoly_resid), pch=as.vector(season(logSeasPoly_resid)))
 abline(h=0)
 
+
+
+```
+
+```{r}
+# p & q
+
+
+adf.test(logSeasPoly_resid)
+pp.test(logSeasPoly_resid)
+par(mfrow=c(1,2))
+acf(logSeasPoly_resid, lag.max=100)
+pacf(logSeasPoly_resid, lag.max=100)
+par(mfrow=c(1,1))
+eacf(logSeasPoly_resid)
+
+qqnorm(logSeasPoly_resid)
+qqline(logSeasPoly_resid)
 ```
 
 ```{r}
@@ -410,25 +432,47 @@ points(logBeer)
 residFromHR<-ts(residuals(modelHR), frequency=12, start=c(1956,1))
 plot(residFromHR)
 
+chosenMod<-modelHR
+library(TSA)
+
+har.=harmonic(log(beer_forecast),5)
+predictions<-predict(chosenMod, n.ahead=24,newxreg=newMonthDummy)
+pred<-predictions$pred
+uci<-pred+2*predictions$se
+lci<-pred-2*predictions$se
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,ylim=c(ymin,ymax),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,xlim=c(1993, 1996), ylim=c(4.5,5.5),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+lines(log(beer_forecast), col="black")
+
+
+
+
 ```
 
 Let's take a look and see if we have a stationary series yet
 ```{r}
-# d
-adf.test(logSeasPoly_resid)
-pp.test(logSeasPoly_resid)
-
+adf.test(residFromHR)
+pp.test(residFromHR)
+acf(residFromHR)
+pacf(residFromHR)
+qqnorm(residFromHR)
+qqline(residFromHR)
 ```
 
 
-```{r}
-# p & q
-par(mfrow=c(1,2))
-acf(logSeasPoly_resid, lag.max=100)
-pacf(logSeasPoly_resid, lag.max=100)
-par(mfrow=c(1,1))
-eacf(logSeasPoly_resid)
-```
+
 
 
 
@@ -459,9 +503,14 @@ abline(h=0)
 par(mfrow=c(2,1))
 acf(ar12_resid)
 pacf(ar12_resid)
+shapiro.test(ar12_resid)
+LB.test(ar12, lag=35)
+
 
 pacf_acf<-data.frame(acfVal=acf(ar12_resid, plot=FALSE)$acf, pacfVal=pacf(ar12_resid, plot=FALSE)$acf)
 #print(pacf_acf)
+
+chosenMod<-ar12
 ```
 
 
@@ -474,7 +523,6 @@ modelString<-getModelString(chosenMod)
 par(mfrow=c(1,1))
 plot(residuals(chosenMod), main=paste("Residuals of Model", modelString))
 abline(h=0)
-
 ```
 
 _Comment:_ 
@@ -521,9 +569,9 @@ newMonthDummy<-seasonaldummy(beer_forecast)
 ```{r}
 library(TSA)
 
-TSA::plot.Arima(chosenMod,n.ahead=24,n1=c(1956,1), type='b',ylab='Logged Beer Production (Megalitres)',xlab='Year', col="red", lty=2, cex=.75)
+TSA::plot.Arima(chosenMod,n.ahead=24,n1=c(1956,1), type='b',ylab='Logged Beer Production (Megalitres)',xlab='Year', col="red", lty=2, cex=.75,newxreg=newMonthDummy)
 
-predictions<-predict(chosenMod, n.ahead=24)
+predictions<-predict(chosenMod, n.ahead=24,newxreg=newMonthDummy)
 pred<-predictions$pred
 uci<-pred+2*predictions$se
 lci<-pred-2*predictions$se
