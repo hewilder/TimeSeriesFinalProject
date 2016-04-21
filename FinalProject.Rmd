@@ -361,9 +361,9 @@ lag6_10_14new<-subset(monthlyLag6Long, as.numeric(rownames(monthlyLag6Long))>=st
 lag6_10_14new<-subset(lag6_10_14new, as.numeric(rownames(lag6_10_14new))<=endDate)
 
 tnew<-1:length(allBeerData)
-t2new<-t^2
-t3new<-t^3
-t4new<-t^4
+t2new<-tnew^2
+t3new<-tnew^3
+t4new<-tnew^4
 
 newRegData<-data.frame(t=tnew, t2=t2new, t3=t3new, t4=t4new)
 newRegData<-newRegData[(nrow(newRegData)-numToFor+1):nrow(newRegData),]
@@ -551,11 +551,15 @@ chosenMod<-modelHR
 library(TSA)
 
 har.=harmonic(log(beer_forecast),5)
-predictions<-predict(chosenMod, n.ahead=24,newxreg=newMonthDummy)
-pred<-predictions$pred
-uci<-pred+2*predictions$se
-lci<-pred-2*predictions$se
+newRegData<-data.frame(t=tnew, t2=t2new, t3=t3new, t4=t4new)
+newRegData<-newRegData[(nrow(newRegData)-numToFor+1):nrow(newRegData),]
+newRegData<-data.frame(har., newRegData)
+colnames(newRegData)<-c(colnames(har.),"t","t2","t3","t4")
 
+predictions<-predict(chosenMod,newdata =newRegData,se.fit = T)
+pred<-ts(predictions$fit,start = c(1993,9),frequency = 12)
+uci<-ts(pred+2*predictions$se.fit,start = c(1993,9),frequency = 12)
+lci<-ts(pred-2*predictions$se.fit,start = c(1993,9),frequency = 12)
 ymin=min(c(as.vector(lci),logBeer))-1
 ymax=max(c(as.vector(uci),logBeer))+1
 plot(logBeer,ylim=c(ymin,ymax),main=modelString, ylab='Logged Beer Production (Megalitres)')
@@ -570,9 +574,6 @@ lines(pred,col=2)
 lines(uci,col=3)
 lines(lci,col=3)
 lines(log(beer_forecast), col="black")
-
-
-
 
 ```
 
