@@ -44,6 +44,8 @@ plot(beerTS, main="Beer Production in Australia by Month")
 
 plot(beerTS, main="Beer Production in Australia by Month (seasons marked)", type="l")
 points(y=beerTS, x=time(beerTS), pch=as.vector(season(beerTS)))
+
+
 ```
 
 #Another plot to show seasonality
@@ -184,7 +186,9 @@ monthlyPopModel<-lm(beer ~ lag6_10_14, data=beerPopMonth)
 summary(monthlyPopModel)
 
 residFromPop<-ts(residuals(monthlyPopModel), frequency=12, start=c(1956,1))
-plot(residFromPop)
+plot(residFromPop, type="l", main="Plot of residuals from Pop model")
+points(y=residFromPop, x=time(residFromPop), pch=as.vector(season(residFromPop)))
+abline(h=0)
 
 ```
 
@@ -201,7 +205,9 @@ monthlyPopModel_log<-lm(logBeer ~ lag6_10_14+t+t2+t3+t4)
 summary(monthlyPopModel_log)
 
 residFromPop_log<-ts(residuals(monthlyPopModel_log), frequency=12, start=c(1956,1))
-plot(residFromPop_log)
+plot(residFromPop_log, type="l", main="Plot of residuals from Pop/Poly Trend logged model")
+points(y=residFromPop_log, x=time(residFromPop_log), pch=as.vector(season(residFromPop_log)))
+abline(h=0)
 ```
 
 Obviously there is a pattern in the residuals here, so we can either try to fit the remainder of the trend or continue on and count that as error in favor of a more simple model. For now we will continue on, but remember to check the residuals of any model we come up with.
@@ -231,7 +237,7 @@ getModelString<-function(model) {
 plotResid<-function(model) {
   residuals<-ts(residuals(model), frequency=12, start=c(1956,1))
   modelString<-getModelString(model)
-  par(mfrow=c(2,1))
+  par(mfrow=c(1,1))
   acf(residuals, main=paste("ACF of", modelString), lag.max=40, cex=.5)
   pacf(residuals, main=paste("PACF of", modelString), lag.max=40, cex=.5)
   par(mfrow=c(1,1))
@@ -240,14 +246,14 @@ plotResid<-function(model) {
 ```
 
 ```{r}
-popModel1<-arima(residFromPop_log, order=c(1,0,0), seasonal=list(order=c(2,0,0), period=6))
+popModel1<-arima(residFromPop_log, order=c(1,0,0), seasonal=list(order=c(1,0,0), period=12))
 plotResid(popModel1)
 ```
 
 There is still a significant autocorrelation at lag 12 in both plots. Perhaps try either p=12 or q=12?
 
 ```{r}
-popModel2<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,0), period=12))
+popModel2<-arima(residFromPop_log, order=c(11,0,0), seasonal=list(order=c(1,0,0), period=12))
 plotResid(popModel2)
 tsdiag(popModel2)
 
@@ -515,10 +521,9 @@ newMonthDummy<-seasonaldummy(beer_forecast)
 ```{r}
 library(TSA)
 
-TSA::plot.Arima(chosenMod,n.ahead=24,n1=c(1956,1), newxreg=newMonthDummy,
-type='b',ylab='Logged Beer Production (Megalitres)',xlab='Year', col="red", lty=2, cex=.75)
+TSA::plot.Arima(chosenMod,n.ahead=24,n1=c(1956,1), type='b',ylab='Logged Beer Production (Megalitres)',xlab='Year', col="red", lty=2, cex=.75)
 
-predictions<-predict(chosenMod, newxreg=newMonthDummy, n.ahead=24)
+predictions<-predict(chosenMod, n.ahead=24)
 pred<-predictions$pred
 uci<-pred+2*predictions$se
 lci<-pred-2*predictions$se
