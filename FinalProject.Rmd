@@ -166,10 +166,23 @@ for (year in 1:nrow(laggedData)) {
   withNA<-c(withNA, laggedData$lag6[year], rep(NA, 11))
 }
 
+#Create a vector with missing values for zoo to interpolate
+withNALong<-c()
+for (year in 1:nrow(pop_totalDataLong)) {
+  withNALong<-c(withNALong, pop_totalDataLong[year, "10-14"], rep(NA, 11))
+}
+
+
 #Interpolate values using zoo library
 zooSeries<-zoo(withNA, frequency=12)
 wAppx<-na.approx(zooSeries, na.rm=FALSE)
 monthlyLag6<-wAppx
+
+#Interpolate long series for forecasting
+zooSeriesLong<-zoo(withNALong, frequency=12)
+wAppxLong<-data.frame(na.approx(zooSeriesLong, na.rm=FALSE))
+rownames(wAppxLong)<-round(seq(from=(1921+6), length.out=nrow(wAppxLong), by=1/12),2)
+monthlyLag6Long<-wAppxLong
 
 #Reattach to beer numbers for plotting
 beerPopMonth<-data.frame(beer=beerTS, lag6_10_14=monthlyLag6[1:length(beerTS)])
@@ -257,7 +270,7 @@ plotResid(popModel1)
 There is still a significant autocorrelation at lag 12 in both plots. Perhaps try either p=12 or q=12?
 
 ```{r}
-popModel2<-arima(residFromPop_log, order=c(11,0,0), seasonal=list(order=c(1,0,0), period=12))
+popModel2<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,0), period=12))
 plotResid(popModel2)
 tsdiag(popModel2)
 
@@ -305,6 +318,24 @@ popModel11
 
 The new coefficients are not significant (with the exception of model 9, which appears to have some issues with fitting), suggesting that we should stick with model 7 (or possibly 8).
 
+
+Overfit model 8 (`r getModelString(popModel8)`)
+
+```{r}
+#popModel12<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(2,0,1), period=12))
+#popModel12
+#Produces error in optim formula
+
+popModel13<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(2,0,1), period=12))
+popModel13
+
+popModel14<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,2), period=12))
+popModel14
+
+popModel15<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(3,0,1), period=12))
+popModel15
+```
+
 Let auto.arima choose a model
 
 ```{r}
@@ -314,6 +345,90 @@ plotResid(autoRes)
 ```
 
 auto.arima chose `r getModelString(autoRes)` but this model still has the same problems as the others we have tried so far (error terms not independent) and the AIC is larger than models 7 and 8, so the only reason we would want to consider this model is if we were really interested in a more parsimonious model. 
+
+#Set up for forecast of population model
+#Make the forecasts
+Set up external regressor data frame
+```{r}
+startDate<-round(start(beer_forecast)[1]+start(beer_forecast)[2]/12,2)
+endDate<-round(end(beer_forecast)[1]+end(beer_forecast)[2]/12,2)
+numToFor<-length(beer_forecast)
+
+allBeerData<-ts(c(beerTS, beer_forecast), start=c(1956, 1), frequency=12)
+
+#Pull data for population
+lag6_10_14new<-subset(monthlyLag6Long, as.numeric(rownames(monthlyLag6Long))>=startDate)
+lag6_10_14new<-subset(lag6_10_14new, as.numeric(rownames(lag6_10_14new))<=endDate)
+
+tnew<-1:length(allBeerData)
+t2new<-t^2
+t3new<-t^3
+t4new<-t^4
+
+newRegData<-data.frame(t=tnew, t2=t2new, t3=t3new, t4=t4new)
+newRegData<-newRegData[(nrow(newRegData)-numToFor+1):nrow(newRegData),]
+newRegData<-data.frame(lag6_10_14=lag6_10_14new, newRegData)
+colnames(newRegData)<-c("lag6_10_14", colnames(newRegData)[2:5])
+
+predFromPop<-predict(monthlyPopModel_log, newdata=newRegData)
+
+```
+
+
+#Plot the model forecasts
+
+```{r}
+library(TSA)
+chosenMod<-popModel8
+
+predictions<-predict(chosenMod, n.ahead=24)
+pred<-predictions$pred+predFromPop
+uci<-pred+2*predictions$se
+lci<-pred-2*predictions$se
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,ylim=c(ymin,ymax),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,xlim=c(1993, 1996), ylim=c(4.5,5.5),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+lines(log(beer_forecast), col="black")
+
+
+pred_raw<-(predictions$pred+predFromPop)
+pred<-exp(predictions$pred+predFromPop)
+uci<-exp(pred_raw+2*predictions$se)
+lci<-exp(pred_raw-2*predictions$se)
+
+ymin=min(c(as.vector(lci),beerTS))-1
+ymax=max(c(as.vector(uci),beerTS))+1
+plot(beerTS,ylim=c(ymin,ymax),main=modelString, ylab='Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+lines(beer_forecast, col="black")
+
+ymin=min(c(as.vector(lci),beerTS))-1
+ymax=max(c(as.vector(uci),beerTS))+1
+plot(beerTS,xlim=c(1993, 1996), ylim=c(ymin,ymax),main=modelString, ylab='Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+lines(beer_forecast, col="black")
+
+```
+
+
+
+
+
 
 #Try to figure out deterministic trend
 ```{r}
@@ -521,7 +636,7 @@ chosenMod<-popModel8
 modelString<-getModelString(chosenMod)
 
 par(mfrow=c(1,1))
-plot(residuals(chosenMod), main=paste("Residuals of Model", modelString))
+plot(residuals(chosenMod), main=paste("Residuals of Model", modelString), ylab="Residual")
 abline(h=0)
 ```
 
@@ -553,6 +668,7 @@ _Comment:_
 
 ```{r fig.width=7, fig.height=4}
 LB.test(chosenMod, lag=35)
+runs(residuals(chosenMod))
 ```
 
 _Comment:_ 
