@@ -35,9 +35,9 @@ colnames(beerData)<-c("Month", "Production")
 beerTS<-ts(beerData[1:(nrow(beerData)-24),2], frequency=12, start=c(1956,1))
 beer_forecast<-ts(beerData[(nrow(beerData)-23):nrow(beerData), 2], start=c(1993,9), frequency=12)
 
-
-
-
+library(forecast)
+beerShort<-ts(subset.ts(beerTS, (time(beerTS)>=1979) & (time(beerTS)< 1985)), start=c(1979,1), frequency=12) 
+seasonplot(beerShort,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarterly beer production", col=rainbow(20), pch=19)
 ```
 
 #Plot data
@@ -611,6 +611,11 @@ ar12_poly
 We seem to be having trouble getting fits for the trend line, ask about this Monday, try just using the month dummies.
 
 ```{r}
+seasMeansMod<-lm(logBeer~season(logBeer))
+plot(ts(residuals(seasMeansMod), start=c(1956,1),frequency=12), ylab="Residuals", main="Residual from Seasonal Means Fit")
+abline(h=0)
+
+
 ar12<-arima(logBeer, order=c(12,0,0), xreg=monthDummies)
 ar12
 tsdiag(ar12, gof.lag=20)
@@ -696,6 +701,8 @@ predictions<-predict(chosenMod, n.ahead=24,newxreg=newMonthDummy)
 pred<-predictions$pred
 uci<-pred+2*predictions$se
 lci<-pred-2*predictions$se
+
+sumSqErrSeasMean<-sum((log(beer_forecast)-pred)^2)
 
 ymin=min(c(as.vector(lci),logBeer))-1
 ymax=max(c(as.vector(uci),logBeer))+1
