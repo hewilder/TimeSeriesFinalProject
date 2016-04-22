@@ -630,15 +630,14 @@ LB.test(ar12, lag=35)
 pacf_acf<-data.frame(acfVal=acf(ar12_resid, plot=FALSE)$acf, pacfVal=pacf(ar12_resid, plot=FALSE)$acf)
 #print(pacf_acf)
 
-chosenMod<-ar12
 ```
 
 
 #After we choose a model, run all of the diagnostic tests
 
 ```{r fig.width=7, fig.height=4}
-chosenMod<-popModel8
-modelString<-getModelString(chosenMod)
+chosenMod<-ar12
+modelString<-paste("Seasonal Means-", getModelString(chosenMod))
 
 par(mfrow=c(1,1))
 plot(residuals(chosenMod), main=paste("Residuals of Model", modelString), ylab="Residual")
