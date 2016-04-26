@@ -6,15 +6,13 @@ output: pdf_document
 geometry: margin=.5in
 ---
 
-Notes:
-Possible source of population data: http://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/3105.0.65.0012014?OpenDocument
 
-Change working directory here
+Change working directory
 ```{r setup, include=FALSE}
 library(TSA)
 
 #Hannah
-#setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalProject/TimeSeriesFinalProject")
+setwd( "C:/Users/Hannah/Downloads/2016SpringTextbooks/TimeSeriesAnalysis/FinalProject/TimeSeriesFinalProject")
 
 #Chathura
 #test
@@ -22,7 +20,7 @@ library(TSA)
 ```
 
 
-Load data (assumes file is in working directory)
+#Load data (assumes file is in working directory)
 ```{r}
 #load the data
 beerData<-read.csv("monthly-beer-production-in-austr.csv")
@@ -31,16 +29,18 @@ beerData<-read.csv("monthly-beer-production-in-austr.csv")
 beerData<-beerData[-nrow(beerData),]
 colnames(beerData)<-c("Month", "Production")
 
+#Get a five number summary of the data
+summary(beerData$Production)
+
 #turn into time series also hold back the last two years of data for forecasting
 beerTS<-ts(beerData[1:(nrow(beerData)-24),2], frequency=12, start=c(1956,1))
 beer_forecast<-ts(beerData[(nrow(beerData)-23):nrow(beerData), 2], start=c(1993,9), frequency=12)
 
-library(forecast)
-beerShort<-ts(subset.ts(beerTS, (time(beerTS)>=1979) & (time(beerTS)< 1985)), start=c(1979,1), frequency=12) 
-seasonplot(beerShort,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarterly beer production", col=rainbow(20), pch=19)
+adf.test(beerTS)
+pp.test(beerTS)
 ```
 
-#Plot data
+#Plot population data
 ```{r}
 library(TSA)
 par(mfrow=c(1,1))
@@ -49,28 +49,17 @@ plot(beerTS, main="Beer Production in Australia by Month")
 plot(beerTS, main="Beer Production in Australia by Month (seasons marked)", type="l")
 points(y=beerTS, x=time(beerTS), pch=as.vector(season(beerTS)))
 
-
-```
-
-#Another plot to show seasonality
-```{r warning=FALSE, message=FALSE}
 require(fpp)
 seasonplot(beerTS,year.labels=TRUE,ylab="megaliters",main="Seasonal plot: quarterly beer production", col=rainbow(20), pch=19)
+
+plot(log(beerTS), main="Logged Beer Production in Australia by Month")
+
+plot(beer_forecast, main="Beer production values to be forecasted")
+
+logBeer<-log(beerTS)
 ```
-
-In the plot we see obvious seasonality with higher production in November and December and lower production in June and July. There is a trend which may be difficult to fit as it doesn't appear to be a "well known" function like a linear or quadratic function, so we'll have to experiment. It also looks like the variance of the data is larger in the middle, so we will probably want to take the log of our data to correct that varaince issue. 
-
-#Decompsing the time series to see trends and patterns
-```{r}
-decompbeer = decompose (beerTS, type="additive")
-plot (decompbeer)
-
-#monthplot(beerTS, main="Decomposition of Series by Month")
-```
-
 
 #Investigate possible relationship with population data
-
 ```{r, fig.width=4, fig.height=2}
 #load population data
 library(reshape)
@@ -109,13 +98,14 @@ par(mfrow=c(1,1))
 
 #Make a model based on the 15-19 age group
 yearModel1<-lm(beer ~ X15.19, data=beerPop)
+summary(yearModel1)
+plot(ts(residuals(yearModel1), frequency=1, start=c(1956)), main="Residuals from modeling beer production with 15-19", ylab="Residual")
 ```
 
-It appears that there may be a relationship with the 15-19 age block, which makes sense since the legal drinking age is 18. We may be able to use this to remove some of our trend. However, the 10-14 age group numbers look like they might have potential if shifted forward a few years. This makes sense since these children will grow up and start drinking beer. 
 
-
-```{r}
 #Explore lagged x10.14 data
+```{r}
+
 laggedData<-data.frame(beer=beerAg[,2])
 models<-list()
 modelRsq<-c()
@@ -132,6 +122,7 @@ for (lag in 0:8) {
 
 plot(modelRsq, main="R Squared Values for lags of 10-14 age group", xlab="lag number", ylab="R squared value")
 abline(v=6, lty=2)
+max(modelRsq)
 
 lagDataScale<-scale(laggedData)[,c(1,8)]
 lagDataMelt<-melt(lagDataScale, variable.name="series")
@@ -143,19 +134,8 @@ print(newPlot)
 plot(ts(residuals(models[["lag6"]]), frequency=1, start=c(1956)), main="Residuals from modeling beer production with 10-14 lag 6", ylab="Residual")
 abline(h=0)
 
-lag6_resid<-ts(residuals(models[["lag6"]]), frequency=1, start=c(1956))
-adf.test(laggedData$beer)
-acf(laggedData$beer)
-pacf(laggedData$beer)
-ar1YearlyModel<-arima(laggedData$beer, order=c(1,1,0), xreg=laggedData$lag6)
-
 ```
 
-We see that lag 6 is the optimal lag in terms of R-squared values. This makes sense because in 6 years, this age group will be 16-20, or right around drinking age. We can see in the residuals that it isn't perfect, but this pattern may be easier to model than what we had before, it looks much more like a regular polynomial. 
-
-We can model just the yearly trend, but this isn't a stationary model, so we want to try to model the monthly data with the seasonality. 
- 
-If we are interested in modeling the seasonal trend in our data, we would need to extend the population data to a monthly series. To do this, we need to assume that the population will change at about the same rate over the year or that it will remain approximately constant over a year. In this case we will choose to assume that the population will change at about the same rate over the year. This may not be true if there is a particular month in which there is a high influx of immigrants, however it seems reasonable to assume that the majority of the population from year to year is composed of people who were in Australia the previous year (source for net migration rate preferrably broken up by age group needed).  
 #Interpolate Monthly Numbers
 ```{r}
 library(zoo)
@@ -194,11 +174,8 @@ colnames(scaleMonthMelt)<-c("time", "series", "stddev")
 #Make a pretty plot
 newPlot<-ggplot(scaleMonthMelt, aes(time,stddev)) + geom_line(aes(colour = series)) +ggtitle(paste("Lag 6 of 10-14 Pop and Beer Prod"))
 print(newPlot)
-```
 
-Now we are ready to investigate models using the population numbers
-
-```{r}
+#Try a model
 monthlyPopModel<-lm(beer ~ lag6_10_14, data=beerPopMonth)
 summary(monthlyPopModel)
 
@@ -206,43 +183,9 @@ residFromPop<-ts(residuals(monthlyPopModel), frequency=12, start=c(1956,1))
 plot(residFromPop, type="l", main="Plot of residuals from Pop model")
 points(y=residFromPop, x=time(residFromPop), pch=as.vector(season(residFromPop)))
 abline(h=0)
-
 ```
 
-We notice that there still appears to be pattern in the residuals and that the variance appears to be larger at later lags, so the first thing we should do is log the beer data to fix the variance problem. We can also try to fit the remainder of the pattern with a polynomial
-
-```{r}
-logBeer<-log(beerPopMonth$beer)
-lag6_10_14<-beerPopMonth$lag6_10_14
-t<-1:length(beerTS)
-t2<-t^2
-t3<-t^3
-t4<-t^4
-monthlyPopModel_log<-lm(logBeer ~ lag6_10_14+t+t2+t3+t4)
-summary(monthlyPopModel_log)
-
-residFromPop_log<-ts(residuals(monthlyPopModel_log), frequency=12, start=c(1956,1))
-plot(residFromPop_log, type="l", main="Plot of residuals from Pop/Poly Trend logged model")
-points(y=residFromPop_log, x=time(residFromPop_log), pch=as.vector(season(residFromPop_log)))
-abline(h=0)
-```
-
-Obviously there is a pattern in the residuals here, so we can either try to fit the remainder of the trend or continue on and count that as error in favor of a more simple model. For now we will continue on, but remember to check the residuals of any model we come up with.
-
-
-
-
-```{r}
-adf.test(residFromPop_log)
-pp.test(residFromPop_log)
-acf(residFromPop_log)
-pacf(residFromPop_log)
-eacf(residFromPop_log)
-```
-
-Based on the pacf plot, perhaps p=1, P=1 in an SARIMA(1,0,0)(1,0,0)[12]
-
-Write up a quick function for plotting acf and pacf of residuals
+#Define helper functions
 ```{r}
 getModelString<-function(model) {
   modSpec<-model$arma
@@ -262,178 +205,13 @@ plotResid<-function(model) {
 
 ```
 
+#Decompsing the time series to see trends and patterns
 ```{r}
-popModel1<-arima(residFromPop_log, order=c(1,0,0), seasonal=list(order=c(1,0,0), period=12))
-plotResid(popModel1)
+decompbeer = decompose (beerTS, type="additive")
+plot (decompbeer)
+
+#monthplot(beerTS, main="Decomposition of Series by Month")
 ```
-
-There is still a significant autocorrelation at lag 12 in both plots. Perhaps try either p=12 or q=12?
-
-```{r}
-popModel2<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,0), period=12))
-plotResid(popModel2)
-tsdiag(popModel2)
-
-popModel3<-arima(residFromPop_log, order=c(1,0,12), seasonal=list(order=c(1,0,0), period=12))
-plotResid(popModel3)
-tsdiag(popModel3)
-```
-
-That definitely looks better, we still have significant lags, but they now lie very close to the boundary. This is true more so for the SARIMA(12,0,0)(1,0,0)[12] model than the SARIMA(0,0,12)(1,0,0)[12] model. 
-
-Try overfitting the SARIMA(12,0,0)(1,0,0)[12]
-```{r}
-#popModel4<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(1,0,0), period=12))
-#Produces error
-
-popModel5<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(1,0,0), period=12))
-popModel5
-
-popModel6<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,0), period=12))
-popModel6
-
-popModel7<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,1), period=12))
-popModel7
-```
-
-We see that the extra coefficients added in models 6 (`r getModelString(popModel6)`) and 7 (`r getModelString(popModel7)`) are both significant, so we try adding them to the model together.
-
-```{r}
-popModel8<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,1), period=12))
-popModel8
-```
-
-With both together, the sar2 coefficent is no longer significant, overfit model 7 (`r getModelString(popModel7)`)
-
-```{r}
-popModel9<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(1,0,1), period=12))
-popModel9
-
-popModel10<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(1,0,1), period=12))
-popModel10
-
-popModel11<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,2), period=12))
-popModel11
-```
-
-The new coefficients are not significant (with the exception of model 9, which appears to have some issues with fitting), suggesting that we should stick with model 7 (or possibly 8).
-
-
-Overfit model 8 (`r getModelString(popModel8)`)
-
-```{r}
-#popModel12<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(2,0,1), period=12))
-#popModel12
-#Produces error in optim formula
-
-popModel13<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(2,0,1), period=12))
-popModel13
-
-popModel14<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,2), period=12))
-popModel14
-
-popModel15<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(3,0,1), period=12))
-popModel15
-```
-
-Let auto.arima choose a model
-
-```{r}
-autoRes<-auto.arima(residFromPop_log, max.p=13, max.order=14, test="adf")
-autoRes
-plotResid(autoRes)
-```
-
-auto.arima chose `r getModelString(autoRes)` but this model still has the same problems as the others we have tried so far (error terms not independent) and the AIC is larger than models 7 and 8, so the only reason we would want to consider this model is if we were really interested in a more parsimonious model. 
-
-#Set up for forecast of population model
-#Make the forecasts
-Set up external regressor data frame
-```{r}
-startDate<-round(start(beer_forecast)[1]+start(beer_forecast)[2]/12,2)
-endDate<-round(end(beer_forecast)[1]+end(beer_forecast)[2]/12,2)
-numToFor<-length(beer_forecast)
-
-allBeerData<-ts(c(beerTS, beer_forecast), start=c(1956, 1), frequency=12)
-
-#Pull data for population
-lag6_10_14new<-subset(monthlyLag6Long, as.numeric(rownames(monthlyLag6Long))>=startDate)
-lag6_10_14new<-subset(lag6_10_14new, as.numeric(rownames(lag6_10_14new))<=endDate)
-
-tnew<-1:length(allBeerData)
-t2new<-tnew^2
-t3new<-tnew^3
-t4new<-tnew^4
-
-newRegData<-data.frame(t=tnew, t2=t2new, t3=t3new, t4=t4new)
-newRegData<-newRegData[(nrow(newRegData)-numToFor+1):nrow(newRegData),]
-newRegData<-data.frame(lag6_10_14=lag6_10_14new, newRegData)
-colnames(newRegData)<-c("lag6_10_14", colnames(newRegData)[2:5])
-
-predFromPop<-predict(monthlyPopModel_log, newdata=newRegData)
-
-
-
-```
-
-
-#Plot the model forecasts
-
-```{r}
-library(TSA)
-chosenMod<-popModel8
-
-predictions<-predict(chosenMod, n.ahead=24)
-pred<-predictions$pred+predFromPop
-uci<-pred+2*predictions$se
-lci<-pred-2*predictions$se
-
-#Calculate sum squared error
-sumSqErrPop<-sum((log(beer_forecast)-pred)^2)
-
-ymin=min(c(as.vector(lci),logBeer))-1
-ymax=max(c(as.vector(uci),logBeer))+1
-plot(logBeer,ylim=c(ymin,ymax),main=modelString, ylab='Logged Beer Production (Megalitres)')
-lines(pred,col=2)
-lines(uci,col=3)
-lines(lci,col=3)
-
-ymin=min(c(as.vector(lci),logBeer))-1
-ymax=max(c(as.vector(uci),logBeer))+1
-plot(logBeer,xlim=c(1993, 1996), ylim=c(4.5,5.5),main=modelString, ylab='Logged Beer Production (Megalitres)')
-lines(pred,col=2)
-lines(uci,col=3)
-lines(lci,col=3)
-lines(log(beer_forecast), col="black")
-
-
-pred_raw<-(predictions$pred+predFromPop)
-pred<-exp(predictions$pred+predFromPop)
-uci<-exp(pred_raw+2*predictions$se)
-lci<-exp(pred_raw-2*predictions$se)
-
-ymin=min(c(as.vector(lci),beerTS))-1
-ymax=max(c(as.vector(uci),beerTS))+1
-plot(beerTS,ylim=c(ymin,ymax),main=modelString, ylab='Beer Production (Megalitres)')
-lines(pred,col=2)
-lines(uci,col=3)
-lines(lci,col=3)
-lines(beer_forecast, col="black")
-
-ymin=min(c(as.vector(lci),beerTS))-1
-ymax=max(c(as.vector(uci),beerTS))+1
-plot(beerTS,xlim=c(1993, 1996), ylim=c(ymin,ymax),main=modelString, ylab='Beer Production (Megalitres)')
-lines(pred,col=2)
-lines(uci,col=3)
-lines(lci,col=3)
-lines(beer_forecast, col="black")
-
-```
-
-
-
-
-
 
 #Try to figure out deterministic trend
 ```{r}
@@ -489,61 +267,20 @@ abline(h=0)
 
 ```
 
-It looks like a 4th order polynomial might take care of the worst of it, the question is are we okay with using a 4th order polynomial or should we drop it down to a cubic function and just deal with it? I found population data and I would be interested to see if we can find a good correlation there (total population won't work, I already looked at that, but maybe a specific age group?)
 
-Assume we go with the 4th order polynomial for now. Let's see what we can do about the seasonality with a seasonal means model
-
-
-
+#Fit deterministic cosine trend model
 ```{r}
-library(TSA)
-month=season(order4polyFit_resid)
-seasMeansModel<-lm(order4polyFit_resid~month)
-summary(seasMeansModel)
-seasMeansModel_resid<-ts(residuals(seasMeansModel),frequency=12, start=c(1956,1)) 
-plot(seasMeansModel_resid, main="Residuals from Seasonal Means Model \n(after fitting 4th order polynomial)")
-abline(h=0)
-```
+startDate<-round(start(beer_forecast)[1]+start(beer_forecast)[2]/12,2)
+endDate<-round(end(beer_forecast)[1]+end(beer_forecast)[2]/12,2)
+numToFor<-length(beer_forecast)
 
-With an adjusted R-squared value of 71%, this is looking pretty good, but in the residual plot you can still the the variance increasing over time. In addition, there is a noticeable "wave" in the residuals that starts around 1970, but I'm not sure what to do about that yet. For now, let's go back, log the data, and apply both the 4th order polynomial and the seasonal means model at the same time. 
+allBeerData<-ts(c(beerTS, beer_forecast), start=c(1956, 1), frequency=12)
 
-```{r}
-logBeer<-log(beerTS)
-t<-1:length(logBeer)
-t2<-t^2
-t3<-t^3
-t4<-t^4
-month<-season(logBeer)
+tnew<-1:length(allBeerData)
+t2new<-tnew^2
+t3new<-tnew^3
+t4new<-tnew^4
 
-logSeasPoly<-lm(logBeer~t+t2+t3+t4+month)
-summary(logSeasPoly)
-
-logSeasPoly_resid<-ts(residuals(logSeasPoly),frequency=12, start=c(1956,1)) 
-plot(logSeasPoly_resid, main="Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time", type="l")
-points(y=logSeasPoly_resid, x=time(logSeasPoly_resid), pch=as.vector(season(logSeasPoly_resid)))
-abline(h=0)
-
-
-
-```
-
-```{r}
-# p & q
-
-
-adf.test(logSeasPoly_resid)
-pp.test(logSeasPoly_resid)
-par(mfrow=c(1,2))
-acf(logSeasPoly_resid, lag.max=100)
-pacf(logSeasPoly_resid, lag.max=100)
-par(mfrow=c(1,1))
-eacf(logSeasPoly_resid)
-
-qqnorm(logSeasPoly_resid)
-qqline(logSeasPoly_resid)
-```
-
-```{r}
 har.=harmonic(logBeer,5)
 modelHR=lm(logBeer~har.+t+t2+t3+t4)
 summary(modelHR)
@@ -560,7 +297,22 @@ newRegData<-data.frame(t=tnew, t2=t2new, t3=t3new, t4=t4new)
 newRegData<-newRegData[(nrow(newRegData)-numToFor+1):nrow(newRegData),]
 newRegData<-data.frame(har., newRegData)
 colnames(newRegData)<-c(colnames(har.),"t","t2","t3","t4")
+```
 
+#Diagnostics on Cosine Trend
+```{r}
+adf.test(residFromHR)
+pp.test(residFromHR)
+acf(residFromHR)
+pacf(residFromHR)
+qqnorm(residFromHR)
+qqline(residFromHR)
+```
+
+
+#Forecast based on cosine trend model
+```{r}
+modelString<-"Cosine trend model"
 predictions<-predict(chosenMod,newdata =newRegData,se.fit = T)
 pred<-ts(predictions$fit,start = c(1993,9),frequency = 12)
 uci<-ts(pred+2*predictions$se.fit,start = c(1993,9),frequency = 12)
@@ -582,22 +334,57 @@ lines(log(beer_forecast), col="black")
 
 ```
 
-Let's take a look and see if we have a stationary series yet
+
+  
+#Seasonal means model with ARIMA
+
 ```{r}
-adf.test(residFromHR)
-pp.test(residFromHR)
-acf(residFromHR)
-pacf(residFromHR)
-qqnorm(residFromHR)
-qqline(residFromHR)
+logBeer<-log(beerTS)
+t<-1:length(logBeer)
+t2<-t^2
+t3<-t^3
+t4<-t^4
+month<-season(logBeer)
+
+seasMod<-lm(beerTS~month)
+summary(seasMod)
+
+seas_resid<-ts(residuals(seasMod),frequency=12, start=c(1956,1)) 
+plot(seas_resid, main="Residuals from Seasonal Means Model")
+abline(h=0)
+
+
+order4polyFit<-lm(beerTS~t+t2+t3+t4)
+summary(order4polyFit)
+
+#### plot the data and the fitted 4th order polynomial trend function
+plot(x=1:length(beerTS),y=beerTS,type='l',ylab="Beer Production (Megalitres)",xlab="Time - Number of Months Since Jan 1956",main="order4poly Fit on Beer Production Data")
+curve(expr = coef(order4polyFit)[1]+coef(order4polyFit)[2]*x+coef(order4polyFit)[3]*x^2+coef(order4polyFit)[4]*x^3+coef(order4polyFit)[5]*x^4,lty=1,add = TRUE, col="red")
+
+poly_resid<-ts(residuals(order4polyFit),frequency=12, start=c(1956,1)) 
+plot(poly_resid, main="Residuals from 4th order polynomial Model")
+abline(h=0)
+
+logSeasPoly<-lm(logBeer~t+t2+t3+t4+month)
+summary(logSeasPoly)
+
+logSeasPoly_resid<-ts(residuals(logSeasPoly),frequency=12, start=c(1956,1)) 
+plot(logSeasPoly_resid, main="Residuals from Logged Beer\nSeasonal Means and 4th Order Poly Fit")
+abline(h=0)
+plot(logSeasPoly_resid, main="Residuals from Logged Beer\nSeasonal Means and 4th Order Poly Fit", type="l")
+points(y=logSeasPoly_resid, x=time(logSeasPoly_resid), pch=as.vector(season(logSeasPoly_resid)))
+abline(h=0)
+
+
+acf(logSeasPoly_resid, main="ACF of Residuals from Logged Beer- Seas Means and Poly Fit", lag=35)
+pacf(logSeasPoly_resid,main="PACF of Residuals from Logged Beer- Seas Means and Poly Fit", lag=35)
+
+adf.test(logSeasPoly_resid)
+pp.test(logSeasPoly_resid)
+
 ```
 
-
-
-
-
-
-Try an AR(12) model and examine residuals
+#Try an AR 12 model with the seasonal means and polynomial
 ```{r fig.width=8, fig.height=8}
 #Set up external regressors and dummy vars
 library(forecast)
@@ -606,10 +393,16 @@ externReg<-data.frame(t, t2, t3, t4, monthDummies)
 
 ar12_poly<-arima(logBeer, order=c(12,0,0), xreg=externReg)
 ar12_poly
+ar12_poly_resid<-ts(resid(ar12_poly), start=c(1956, 1), frequency=12)
+plot(ar12_poly_resid, xlab="residual", ylab="time",main="Residuals from ARIMA(12,0,0) with Seas/Poly Deterministic Trend")
+abline(h=0)
+acf(ar12_poly_resid,main="ACF of Residuals from ARIMA(12,0,0)\nwith Seas/Poly Deterministic Trend")
+pacf(ar12_poly_resid,main="PACF of Residuals from ARIMA(12,0,0)\nwith Seas/Poly Deterministic Trend",mar=c(4,2,2,0.8), oma=c(2,1,1,1))
+
 ```
 
-We seem to be having trouble getting fits for the trend line, ask about this Monday, try just using the month dummies.
 
+#Build models based on the seasonal means only
 ```{r}
 seasMeansMod<-lm(logBeer~season(logBeer))
 plot(ts(residuals(seasMeansMod), start=c(1956,1),frequency=12), ylab="Residuals", main="Residual from Seasonal Means Fit")
@@ -622,14 +415,46 @@ tsdiag(ar12, gof.lag=20)
 
 #residuals
 ar12_resid<-ts(residuals(ar12), frequency=12, start=c(1956,1)) 
-plot(ar12_resid, main="AR 12 model Residuals from Logged Beer\nseasonal Means and 4th order poly fit at same time", type="l")
+plot(ar12_resid, main="AR 12 model Residuals from Logged Beer\nSeasonal Means")
+abline(h=0)
+plot(ar12_resid, main="AR 12 model Residuals from Logged Beer\nSeasonal Means", type="l")
 points(y=ar12_resid, x=time(ar12_resid), pch=as.vector(season(ar12_resid)))
 abline(h=0)
 
-par(mfrow=c(2,1))
-acf(ar12_resid)
-pacf(ar12_resid)
+acf(ar12_resid, main="ACF Plot of Residuals from ARIMA(12,0,0)")
+pacf(ar12_resid, main="PACF Plot of Residuals from ARIMA(12,0,0)")
+
+ar13<-arima(logBeer, order=c(13,0,0), xreg=monthDummies)
+ar13
+tsdiag(ar13, gof.lag=20)
+
+ar12ma1<-arima(logBeer, order=c(12,0,1), xreg=monthDummies)
+ar12ma1
+tsdiag(ar12ma1, gof.lag=20)
+
+ar12ma1_resid<-ts(residuals(ar12ma1), frequency=12, start=c(1956,1)) 
+plot(ar12ma1_resid, main="AR 12 MA 1 model Residuals from Logged Beer\nseasonal Means", type="l")
+points(y=ar12ma1_resid, x=time(ar12ma1_resid), pch=as.vector(season(ar12ma1_resid)))
+abline(h=0)
+
+acf(ar12ma1_resid,main="ACF of Residuals from ARIMA(12,0,1)\nwith Seas Trend")
+pacf(ar12ma1_resid,main="PACF of Residuals from ARIMA(12,0,1)\nwith Seas Trend",mar=c(5,2,2,0.8), oma=c(1,1,1,1))
+
+ar13ma1<-arima(logBeer, order=c(13,0,1), xreg=monthDummies)
+ar13ma1
+tsdiag(ar13ma1, gof.lag=20)
+
+ar12ma2<-arima(logBeer, order=c(12,0,2), xreg=monthDummies)
+ar12ma2
+tsdiag(ar12ma2, gof.lag=20)
+
+par(mfrow=c(1,1))
+
+qqnorm(residuals(ar12), main="Normal QQ Plot of Residuals from ARIMA(12,0,0)")
+qqline(ar12_resid)
 shapiro.test(ar12_resid)
+
+
 LB.test(ar12, lag=35)
 
 
@@ -639,64 +464,15 @@ pacf_acf<-data.frame(acfVal=acf(ar12_resid, plot=FALSE)$acf, pacfVal=pacf(ar12_r
 ```
 
 
-#After we choose a model, run all of the diagnostic tests
-
-```{r fig.width=7, fig.height=4}
-chosenMod<-ar12
-modelString<-paste("Seasonal Means-", getModelString(chosenMod))
-
-par(mfrow=c(1,1))
-plot(residuals(chosenMod), main=paste("Residuals of Model", modelString), ylab="Residual")
-abline(h=0)
-```
-
-_Comment:_ 
-
-```{r fig.width=7, fig.height=4}
-par(mfrow=c(1,1))
-qqnorm(residuals(chosenMod), main=paste("Normal QQ Plot of Residuals from", modelString))
-qqline(residuals(chosenMod))
-
-```
-
-_Comment:_ 
-
-```{r fig.width=7, fig.height=4}
-par(mfrow=c(1,1))
-acf(residuals(chosenMod), main=paste("ACF of Residuals from", modelString))
-```
-
-_Comment:_ 
-
-
-```{r fig.width=7, fig.height=4}
-shapiro.test(residuals(chosenMod))
-
-```
-
-_Comment:_ 
-
-```{r fig.width=7, fig.height=4}
-LB.test(chosenMod, lag=35)
-runs(residuals(chosenMod))
-```
-
-_Comment:_ 
-
-#Make the forecasts
-Set up external regressor data frame
+#Make the forecasts- set up external regressor data frame
 ```{r}
 newMonthDummy<-seasonaldummy(beer_forecast)
 ```
 
 
 #Plot the model forecasts
-
 ```{r}
-library(TSA)
-
-TSA::plot.Arima(chosenMod,n.ahead=24,n1=c(1956,1), type='b',ylab='Logged Beer Production (Megalitres)',xlab='Year', col="red", lty=2, cex=.75,newxreg=newMonthDummy)
-
+chosenMod<-ar12
 predictions<-predict(chosenMod, n.ahead=24,newxreg=newMonthDummy)
 pred<-predictions$pred
 uci<-pred+2*predictions$se
@@ -720,4 +496,205 @@ lines(lci,col=3)
 lines(log(beer_forecast), col="black")
 
 ```
+
+
+
+
+
+#SARIMA model with population data
+```{r}
+logBeer<-log(beerPopMonth$beer)
+lag6_10_14<-beerPopMonth$lag6_10_14
+t<-1:length(beerTS)
+t2<-t^2
+t3<-t^3
+t4<-t^4
+externalReg<-data.frame(lag6_10_14, t, t2, t3, t4)
+monthlyPopModel_log<-lm(logBeer ~ lag6_10_14+t+t2+t3+t4)
+monthlyPopOnly_log<-lm(logBeer ~ lag6_10_14)
+summary(monthlyPopModel_log)
+
+residFromPop_log<-ts(residuals(monthlyPopModel_log), frequency=12, start=c(1956,1))
+plot(residFromPop_log, main="Plot of residuals from Pop/Poly Trend logged model")
+abline(h=0)
+plot(residFromPop_log, type="l", main="Plot of residuals from Pop/Poly Trend logged model")
+points(y=residFromPop_log, x=time(residFromPop_log), pch=as.vector(season(residFromPop_log)))
+abline(h=0)
+```
+
+
+
+```{r}
+adf.test(residFromPop_log)
+pp.test(residFromPop_log)
+nsdiffs(residFromPop_log, m=frequency(residFromPop_log), test=c("ocsb","ch"), max.D=1)
+acf(residFromPop_log)
+pacf(residFromPop_log)
+eacf(residFromPop_log)
+```
+
+
+#Build initial model
+```{r}
+popModel1<-arima(residFromPop_log, order=c(1,0,0), seasonal=list(order=c(1,0,0), period=12))
+plotResid(popModel1)
+```
+
+#Try p=12 and q=12
+```{r}
+popModel2<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,0), period=12))
+plotResid(popModel2)
+tsdiag(popModel2)
+
+popModel3<-arima(residFromPop_log, order=c(1,0,12), seasonal=list(order=c(1,0,0), period=12))
+plotResid(popModel3)
+tsdiag(popModel3)
+```
+
+
+#Try overfitting the SARIMA(12,0,0)(1,0,0)[12]
+```{r}
+#popModel4<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(1,0,0), period=12))
+#Produces error
+
+popModel5<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(1,0,0), period=12))
+popModel5
+
+popModel6<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,0), period=12))
+popModel6
+
+popModel7<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,1), period=12))
+popModel7
+```
+
+#Overfit model 7 (`r getModelString(popModel7)`)
+```{r}
+popModel8<-arima(residFromPop_log, order=c(13,0,0), seasonal=list(order=c(1,0,1), period=12))
+popModel8
+
+popModel9<-arima(residFromPop_log, order=c(12,0,1), seasonal=list(order=c(1,0,1), period=12))
+popModel9
+
+popModel10<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(2,0,1), period=12))
+popModel10
+
+popModel11<-arima(residFromPop_log, order=c(12,0,0), seasonal=list(order=c(1,0,2), period=12))
+popModel11
+```
+
+#Run diagnostics on model 7
+```{r fig.width=7, fig.height=4}
+chosenMod<-popModel7
+modelString<-paste(getModelString(chosenMod), "with Population Data")
+
+par(mfrow=c(1,1))
+plot(residuals(chosenMod), main=paste("Residuals of Model", modelString), ylab="Residual")
+abline(h=0)
+par(mfrow=c(1,1))
+plot(residuals(chosenMod), main=paste("Residuals of Model", modelString), ylab="Residual", type="l")
+points(y=residuals(chosenMod), x=time(residuals(chosenMod)), pch=as.vector(season(residuals(chosenMod))))
+abline(h=0)
+```
+
+
+```{r fig.width=7, fig.height=4}
+par(mfrow=c(1,1))
+qqnorm(residuals(chosenMod), main=paste("Normal QQ Plot of Residuals from", modelString))
+qqline(residuals(chosenMod))
+
+shapiro.test(residuals(chosenMod))
+
+```
+
+
+```{r fig.width=7, fig.height=4}
+par(mfrow=c(1,1))
+acf(residuals(chosenMod), main=paste("ACF of Residuals from", modelString))
+
+LB.test(chosenMod, lag=35)
+runs(residuals(chosenMod))
+```
+
+
+#Set up for forecast of population model
+```{r}
+startDate<-round(start(beer_forecast)[1]+start(beer_forecast)[2]/12,2)
+endDate<-round(end(beer_forecast)[1]+end(beer_forecast)[2]/12,2)
+numToFor<-length(beer_forecast)
+
+allBeerData<-ts(c(beerTS, beer_forecast), start=c(1956, 1), frequency=12)
+
+#Pull data for population
+lag6_10_14new<-subset(monthlyLag6Long, as.numeric(rownames(monthlyLag6Long))>=startDate)
+lag6_10_14new<-subset(lag6_10_14new, as.numeric(rownames(lag6_10_14new))<=endDate)
+
+tnew<-1:length(allBeerData)
+t2new<-tnew^2
+t3new<-tnew^3
+t4new<-tnew^4
+
+newRegData<-data.frame(t=tnew, t2=t2new, t3=t3new, t4=t4new)
+newRegData<-newRegData[(nrow(newRegData)-numToFor+1):nrow(newRegData),]
+newRegData<-data.frame(lag6_10_14=lag6_10_14new, newRegData)
+colnames(newRegData)<-c("lag6_10_14", colnames(newRegData)[2:5])
+
+predFromPop<-predict(monthlyPopModel_log, newdata=newRegData, se.fit=TRUE)
+uci_lm<-ts(predFromPop$fit+2*predFromPop$se.fit, start=c(1993, 9), frequency = 12)
+lci_lm<-ts(predFromPop$fit-2*predFromPop$se.fit, start=c(1993, 9), frequency = 12)
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,xlim=c(1993, 1996), ylim=c(4.5,5.5),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(ts(predFromPop$fit, start=c(1993, 9), frequency = 12),col=2)
+lines(uci_lm,col=3)
+lines(lci_lm,col=3)
+lines(log(beer_forecast), col="black")
+
+```
+
+
+#Plot the model forecasts
+
+```{r}
+ 
+predictions<-predict(chosenMod, n.ahead=24)
+
+pred_raw<-(predictions$pred+predFromPop$fit)
+pred<-predictions$pred+predFromPop$fit
+uci<-pred_raw+2*predictions$se
+lci<-pred_raw-2*predictions$se
+uci_lm<-pred_raw+2*(predictions$se+predFromPop$se.fit)
+lci_lm<-pred_raw-2*(predictions$se+predFromPop$se.fit)
+
+sumSqErrSARIMA<-sum((log(beer_forecast)-pred)^2)
+
+ymin=min(c(as.vector(lci),logBeer))-1
+ymax=max(c(as.vector(uci),logBeer))+1
+plot(logBeer,ylim=c(ymin,ymax),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+lines(log(beer_forecast), col="black")
+
+ymin=min(c(as.vector(lci),log(beer_forecast)))-0.1
+ymax=max(c(as.vector(uci),log(beer_forecast)))+0.1
+plot(logBeer,xlim=c(1993, 1996), ylim=c(ymin,ymax),main=modelString, ylab='Logged Beer Production (Megalitres)')
+lines(pred,col=2)
+lines(uci,col=3)
+lines(lci,col=3)
+lines(uci_lm,col="blue")
+lines(lci_lm,col="blue")
+lines(log(beer_forecast), col="black")
+
+```
+
+
+
+
+
+
+
+
+
+
 
