@@ -99,7 +99,7 @@ par(mfrow=c(1,1))
 #Make a model based on the 15-19 age group
 yearModel1<-lm(beer ~ X15.19, data=beerPop)
 summary(yearModel1)
-plot(ts(residuals(yearModel1), frequency=1, start=c(1956)), main="Residuals from modeling beer production with 15-19", ylab="Residual")
+#plot(ts(residuals(yearModel1), frequency=1, start=c(1956)), main="Residuals from modeling beer production with 15-19", ylab="Residual")
 ```
 
 
@@ -199,6 +199,7 @@ plotResid<-function(model) {
   modelString<-getModelString(model)
   par(mfrow=c(1,1))
   acf(residuals, main=paste("ACF of", modelString), lag.max=40, cex=.5)
+  plot.new()
   pacf(residuals, main=paste("PACF of", modelString), lag.max=40, cex=.5)
   par(mfrow=c(1,1))
 }
@@ -472,6 +473,7 @@ newMonthDummy<-seasonaldummy(beer_forecast)
 
 #Plot the model forecasts
 ```{r}
+modelString<-"Seasonal Means - ARIMA(12,0,0)"
 chosenMod<-ar12
 predictions<-predict(chosenMod, n.ahead=24,newxreg=newMonthDummy)
 pred<-predictions$pred
